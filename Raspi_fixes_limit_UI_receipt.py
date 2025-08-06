@@ -2127,7 +2127,7 @@ def main():
                                     while not should_exit and not system_ready:
                                         time.sleep(0.5)
                                         root_window.update()
-                                    # print_receipt(name, drink_name)
+                                    #print_receipt(name, drink_name)
                     else:
                         # User not recognized - offer registration
                         show_error_screen("I don't recognize you yet.\nWould you like to register as a new user?")
@@ -2239,6 +2239,8 @@ def main():
                 # Handle stir response if needed
                 if waiting_for_stir_response and not should_exit:
                     show_stir_question_mqtt()
+                    print_receipt(name, drink_name)
+                    
                 
                 # Small delay before next iteration
                 if not should_exit:
