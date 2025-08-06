@@ -33,7 +33,7 @@ DNN_PROTO = "models/opencv_face_detector.pbtxt"
 DNN_MODEL = "models/opencv_face_detector_uint8.pb"
 
 # MQTT Configuration
-MQTT_BROKER = "192.168.17.207"
+MQTT_BROKER = "192.168.255.207"
 MQTT_PORT = 1883
 MQTT_CLIENT_ID = "barbot_face_recognition"
 MQTT_TOPIC_FACE_RECOGNITION = "barbot/face/recognition"
@@ -239,7 +239,7 @@ def measure_distance():
     distance = pulse_duration * 17150
     distance = round(distance, 2)
     
-    return max(2, min(30, distance))
+    return max(2, min(9, distance))
 
 def check_capacitive_sensor():
     """Check capacitive sensor state"""
@@ -344,7 +344,6 @@ def monitor_ir_sensors():
         except Exception as e:
             print(f"IR monitoring error: {e}")
             time.sleep(1)  # Longer delay if error occurs
-
 def monitor_limit_switch():
     print("Limit switch monitor starting...")
     last_state = None
@@ -364,6 +363,8 @@ def monitor_limit_switch():
                 try:
                     if current_state:
                         mqtt_client.publish(MQTT_TOPIC_LIMIT_SWITCH, "danger", qos=1)
+                        # Trigger system reset when limit switch is activated
+                        handle_limit_switch_trigger()
                     else:
                         mqtt_client.publish(MQTT_TOPIC_LIMIT_SWITCH, "safe", qos=1)
                 except Exception as e:
@@ -376,6 +377,82 @@ def monitor_limit_switch():
         except Exception as e:
             print(f"Error in limit switch monitor: {e}")
             time.sleep(1)
+
+def handle_limit_switch_trigger():
+    """Handle limit switch trigger by resetting system to face recognition"""
+    global should_exit, current_drink, recognized_user, system_ready, waiting_for_stir_response, waiting_for_cup, root_window
+    
+    print("🚨 LIMIT SWITCH TRIGGERED - Resetting system...")
+    
+    # Reset all system states
+    current_drink = None
+    recognized_user = None
+    system_ready = True
+    waiting_for_stir_response = False
+    waiting_for_cup = False
+    
+    # Stop any ongoing drink preparation
+    if mqtt_client:
+        mqtt_client.publish(MQTT_TOPIC_MOTOR_STATUS, "stop")
+        print("🛑 Stopping drink preparation due to limit switch")
+    
+    # Show emergency reset screen
+    if root_window:
+        root_window.after(0, show_emergency_reset_screen)
+
+def show_emergency_reset_screen():
+    """Show emergency reset screen when limit switch is triggered"""
+    global should_exit
+    
+    def on_continue():
+        root.quit()
+    
+    root = get_root_window()
+    clear_window(root)
+    
+    main_frame = tk.Frame(root, bg="#f5f1ed")
+    main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+    
+    # Emergency message
+    emergency_frame = tk.Frame(main_frame, bg="#f5f1ed")
+    emergency_frame.pack(expand=True, fill="both")
+    
+    icon_label = tk.Label(emergency_frame, text="🚨", 
+                         font=("Helvetica", 72), bg="#f5f1ed")
+    icon_label.pack(pady=20)
+    
+    title_label = tk.Label(emergency_frame, text="Safety Reset",
+                          font=("Helvetica", 32, "bold"),
+                          bg="#f5f1ed", fg="#ff6b6b")
+    title_label.pack(pady=(0, 10))
+    
+    message_label = tk.Label(emergency_frame, text="System has been reset for safety.\nReturning to main menu...",
+                            font=("Helvetica", 20),
+                            bg="#f5f1ed", fg="#666666",
+                            justify="center")
+    message_label.pack(pady=(0, 30))
+    
+    status_label = tk.Label(emergency_frame, text="All operations have been stopped",
+                           font=("Helvetica", 16),
+                           bg="#f5f1ed", fg="#ffa726")
+    status_label.pack(pady=10)
+    
+    # Continue button
+    button_frame = tk.Frame(main_frame, bg="#f5f1ed")
+    button_frame.pack(fill="x", pady=20)
+    
+    TouchButton(button_frame, "CONTINUE", on_continue, 
+                width=250, height=70, font_size=20, bg_color="#ff7043").pack(anchor="center")
+    
+    root.after(100, lambda: root.focus_set())
+    
+    # Auto-continue after 3 seconds
+    root.after(3000, on_continue)
+    
+    try:
+        root.mainloop()
+    except:
+        pass
 
 def monitor_hardware():
     """Monitor all hardware sensors in background thread"""
@@ -1583,7 +1660,7 @@ def show_making_drink_screen():
 
 def show_stir_question_mqtt():
     """Show stir question when drink is complete"""
-    global should_exit, waiting_for_stir_response, mqtt_client, system_ready
+    global should_exit, waiting_for_stir_response, mqtt_client, system_ready, recognized_user, current_drink
     
     def send_response(response):
         """Helper function to send MQTT response with error handling"""
@@ -1613,11 +1690,16 @@ def show_stir_question_mqtt():
 
     def on_yes():
         if send_response("yes"):
+            # Print receipt before showing stirring screen
+            if recognized_user and recognized_user[0]:
+                name = recognized_user[0]
+            else:
+                print_receipt(name or "Customer", DRINK_OPTIONS.get(current_drink, "Unknown Drink"))
+            
             show_stirring_screen()
             # Add visual feedback while waiting
             status_label.config(text="Stirring in progress...", fg="blue")
             root.update()
-            
             # Wait for completion
             start_time = time.time()
             while (not should_exit and not system_ready and 
@@ -1633,6 +1715,12 @@ def show_stir_question_mqtt():
 
     def on_no():
         if send_response("no"):
+            # Print receipt before showing final screen
+            if recognized_user and recognized_user[0]:
+                name = recognized_user[0]
+            else:
+                print_receipt(name or "Customer", DRINK_OPTIONS.get(current_drink, "Unknown Drink"))
+            
             show_drink_ready_final()
         root.quit()
 
@@ -1659,6 +1747,7 @@ def show_stir_question_mqtt():
                             font=("Helvetica", 22),
                             bg="#f5f1ed", fg="#333333")
     question_label.pack(pady=(0, 30))
+    
     
     # Status label for feedback
     status_label = tk.Label(main_frame, text="", 
@@ -1712,6 +1801,7 @@ def show_stirring_screen():
                          font=("Helvetica", 18),
                          bg="#f5f1ed", fg="#666666")
    status_label.pack(pady=20)
+
    
    # Animate stirring
    def animate_stir():
@@ -2012,7 +2102,7 @@ def main():
                                     while not should_exit and not system_ready:
                                         time.sleep(0.5)
                                         root_window.update()
-                                    print_receipt(name, drink_name)
+                                    
                             else:
                                 show_error_screen("Sorry, your favorite drink is not available.")
                         
@@ -2037,7 +2127,7 @@ def main():
                                     while not should_exit and not system_ready:
                                         time.sleep(0.5)
                                         root_window.update()
-                                    print_receipt(name, drink_name)
+                                    # print_receipt(name, drink_name)
                     else:
                         # User not recognized - offer registration
                         show_error_screen("I don't recognize you yet.\nWould you like to register as a new user?")
@@ -2078,7 +2168,7 @@ def main():
                                         while not should_exit and not system_ready:
                                             time.sleep(0.5)
                                             root_window.update()
-                                        print_receipt(name, drink_name)
+                                        #print_receipt(name, drink_name)
 
                 elif choice == "manual_order":
                     # Manual drink ordering
@@ -2102,7 +2192,7 @@ def main():
                             while not should_exit and not system_ready:
                                 time.sleep(0.5)
                                 root_window.update()
-                            print_receipt("Customer", drink_name)
+                            #print_receipt("Customer", drink_name)
 
                 elif choice == "register":
                     # New user registration
@@ -2139,7 +2229,7 @@ def main():
                                     while not should_exit and not system_ready:
                                         time.sleep(0.5)
                                         root_window.update()
-                                    print_receipt(name, drink_name)
+                                    #print_receipt(name, drink_name)
 
                 elif choice is None or choice == "exit":
                     # Exit application
