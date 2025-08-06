@@ -408,7 +408,7 @@ def show_emergency_reset_screen():
         root.quit()
     
     root = get_root_window()
-    clear_window(root)
+    main()
     
     main_frame = tk.Frame(root, bg="#f5f1ed")
     main_frame.pack(fill="both", expand=True, padx=20, pady=20)
@@ -528,7 +528,7 @@ def init_camera():
     """Initialize camera with optimal settings"""
     picam = Picamera2()
     config = picam.create_preview_configuration(
-        main={"size": (640, 480), "format": "RGB888"},
+        main={"size": (640, 480), "format": "BGR888"},
         transform=Transform(hflip=False, vflip=False)
     )
     picam.configure(config)
@@ -1660,7 +1660,7 @@ def show_making_drink_screen():
 
 def show_stir_question_mqtt():
     """Show stir question when drink is complete"""
-    global should_exit, waiting_for_stir_response, mqtt_client, system_ready, recognized_user, current_drink
+    global should_exit, waiting_for_stir_response, mqtt_client, system_ready
     
     def send_response(response):
         """Helper function to send MQTT response with error handling"""
@@ -1690,16 +1690,11 @@ def show_stir_question_mqtt():
 
     def on_yes():
         if send_response("yes"):
-            # Print receipt before showing stirring screen
-            if recognized_user and recognized_user[0]:
-                name = recognized_user[0]
-            else:
-                print_receipt(name or "Customer", DRINK_OPTIONS.get(current_drink, "Unknown Drink"))
-            
             show_stirring_screen()
             # Add visual feedback while waiting
             status_label.config(text="Stirring in progress...", fg="blue")
             root.update()
+            
             # Wait for completion
             start_time = time.time()
             while (not should_exit and not system_ready and 
@@ -1715,12 +1710,6 @@ def show_stir_question_mqtt():
 
     def on_no():
         if send_response("no"):
-            # Print receipt before showing final screen
-            if recognized_user and recognized_user[0]:
-                name = recognized_user[0]
-            else:
-                print_receipt(name or "Customer", DRINK_OPTIONS.get(current_drink, "Unknown Drink"))
-            
             show_drink_ready_final()
         root.quit()
 
@@ -1747,7 +1736,6 @@ def show_stir_question_mqtt():
                             font=("Helvetica", 22),
                             bg="#f5f1ed", fg="#333333")
     question_label.pack(pady=(0, 30))
-    
     
     # Status label for feedback
     status_label = tk.Label(main_frame, text="", 
@@ -1920,7 +1908,7 @@ def show_processing_screen(title, message, duration):
    clear_window(root)
    
    main_frame = tk.Frame(root, bg="#f5f1ed")
-   main_frame.pack(fill="both", expand=True)
+   main_frame.pack(fill="both", expand=True, padx=20, pady=20)
    
    title_label = tk.Label(main_frame, text=title,
                           font=("Helvetica", 24, "bold"),
@@ -1984,7 +1972,7 @@ def show_goodbye_screen():
    clear_window(root)
    
    main_frame = tk.Frame(root, bg="#f5f1ed")
-   main_frame.pack(fill="both", expand=True)
+   main_frame.pack(fill="both", expand=True, padx=20, pady=20)
    
    goodbye_frame = tk.Frame(main_frame, bg="#f5f1ed")
    goodbye_frame.pack(expand=True, fill="both")
@@ -2236,12 +2224,12 @@ def main():
                     should_exit = True
                     break
                 
-                # Handle stir response if needed
                 if waiting_for_stir_response and not should_exit:
                     show_stir_question_mqtt()
                     print_receipt(name, drink_name)
+                    time.sleep(10)  # Wait for 10 seconds before continuing
+                    continue  # This will jump back to the start of the while loop
                     
-                
                 # Small delay before next iteration
                 if not should_exit:
                     time.sleep(0.5)
