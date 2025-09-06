@@ -21,7 +21,7 @@ A simple mocktail-making system using **ESP32** and **Raspberry Pi 4**.
    ```bash
    git clone https://github.com/AwesomeBlossomm/Mocktail-Robot.git
    cd Mocktail-Robot
-````
+
 
 2. **ESP32 Code**
 
