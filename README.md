@@ -53,4 +53,3 @@ A simple mocktail-making system using **ESP32** and **Raspberry Pi 4**.
 * Jury Andrew Nathaniel F. Lebosada
 * Marvin S. Gamo
 
----
