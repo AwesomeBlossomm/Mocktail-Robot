@@ -1,5 +1,4 @@
 
-````markdown
 # Mocktail-Robot
 
 A simple mocktail-making system using **ESP32** and **Raspberry Pi 4**.
